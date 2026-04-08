@@ -1557,13 +1557,15 @@ function aiUpdate(dt){
       F.aiComboIdx++;
       if(F.aiComboIdx<F.aiCombo.length){
         F.oState='idle';
-        F.aiTimer=0.08;
+        const chainDelay=F.oppIdx<4?0.15+(3-F.oppIdx)*0.08:0.08; // slower chain for early opponents
+        F.aiTimer=chainDelay;
       }else{
-        // Combo finished — SHORT pause then next combo (SPO!! opponents are relentless)
+        // Combo finished — pause before next combo (longer for early opponents)
         F.aiCombo=[];F.aiComboIdx=0;
         F.oState='idle';
-        const pause=0.35-(F.oppIdx*0.02)-(F.aiPhase*0.1);
-        F.aiTimer=Math.max(0.15,pause+Math.random()*0.2);
+        const earlyBonus=Math.max(0,(4-F.oppIdx)*0.2); // +0.8s for opp 0, +0.6 for opp 1, etc, 0 for opp 4+
+        const pause=0.4-(F.oppIdx*0.02)-(F.aiPhase*0.1)+earlyBonus;
+        F.aiTimer=Math.max(0.15,pause+Math.random()*0.25);
       }
     }
   }
@@ -1587,29 +1589,29 @@ function getOpponentCombos(idx){
   // side: 'l' = opponent attacks from left, 'r' = from right (for counter timing)
   const phase=F.aiPhase;
   const combos=[
-    // Mochi — rapid jab combos, easy rhythm
+    // El Gallo — very slow, deliberate jab combos (tutorial opponent)
     [
-      [{tell:0.4,type:'jab',zone:'high',side:'r'},{tell:0.3,type:'jab',zone:'high',side:'l'}],
-      [{tell:0.4,type:'jab',zone:'high',side:'l'},{tell:0.4,type:'body_blow',zone:'low',side:'r'}],
-      [{tell:0.5,type:'jab',zone:'high',side:'r'},{tell:0.3,type:'jab',zone:'high',side:'l'},{tell:0.4,type:'body_blow',zone:'low',side:'r'}],
+      [{tell:0.9,type:'jab',zone:'high',side:'r'},{tell:0.8,type:'jab',zone:'high',side:'l'}],
+      [{tell:0.9,type:'jab',zone:'high',side:'l'},{tell:0.85,type:'body_blow',zone:'low',side:'r'}],
+      [{tell:1.0,type:'jab',zone:'high',side:'r'},{tell:0.8,type:'jab',zone:'high',side:'l'},{tell:0.9,type:'body_blow',zone:'low',side:'r'}],
     ],
-    // Kalo — alternating high/low
+    // Nok Chai — slow alternating high/low, teaches duck timing
     [
-      [{tell:0.4,type:'jab',zone:'high',side:'r'},{tell:0.4,type:'body_blow',zone:'low',side:'l'},{tell:0.5,type:'jab',zone:'high',side:'r'}],
-      [{tell:0.5,type:'body_blow',zone:'low',side:'l'},{tell:0.4,type:'hook',zone:'high',side:'r'}],
-      [{tell:0.4,type:'jab',zone:'high',side:'l'},{tell:0.5,type:'uppercut',zone:'high',side:'r'}],
+      [{tell:0.75,type:'jab',zone:'high',side:'r'},{tell:0.7,type:'body_blow',zone:'low',side:'l'},{tell:0.8,type:'jab',zone:'high',side:'r'}],
+      [{tell:0.8,type:'body_blow',zone:'low',side:'l'},{tell:0.7,type:'hook',zone:'high',side:'r'}],
+      [{tell:0.75,type:'jab',zone:'high',side:'l'},{tell:0.8,type:'uppercut',zone:'high',side:'r'}],
     ],
-    // Lumpia — fast hook combos
+    // Rayo — medium speed hook combos, teaches dodge timing
     [
-      [{tell:0.35,type:'hook',zone:'high',side:'r'},{tell:0.35,type:'hook',zone:'high',side:'l'}],
-      [{tell:0.4,type:'body_blow',zone:'low',side:'l'},{tell:0.35,type:'hook',zone:'high',side:'r'},{tell:0.4,type:'body_blow',zone:'low',side:'l'}],
-      [{tell:0.3,type:'jab',zone:'high',side:'r'},{tell:0.3,type:'jab',zone:'high',side:'l'},{tell:0.4,type:'hook',zone:'high',side:'r'}],
+      [{tell:0.6,type:'hook',zone:'high',side:'r'},{tell:0.6,type:'hook',zone:'high',side:'l'}],
+      [{tell:0.65,type:'body_blow',zone:'low',side:'l'},{tell:0.6,type:'hook',zone:'high',side:'r'},{tell:0.65,type:'body_blow',zone:'low',side:'l'}],
+      [{tell:0.55,type:'jab',zone:'high',side:'r'},{tell:0.55,type:'jab',zone:'high',side:'l'},{tell:0.65,type:'hook',zone:'high',side:'r'}],
     ],
-    // Mahimahi — body specialist
+    // Garuda — medium body specialist, teaches counter windows
     [
-      [{tell:0.4,type:'body_blow',zone:'low',side:'l'},{tell:0.35,type:'body_blow',zone:'low',side:'r'},{tell:0.5,type:'uppercut',zone:'high',side:'l'}],
-      [{tell:0.35,type:'jab',zone:'high',side:'r'},{tell:0.4,type:'body_blow',zone:'low',side:'l'},{tell:0.35,type:'body_blow',zone:'low',side:'r'}],
-      [{tell:0.5,type:'uppercut',zone:'high',side:'r'},{tell:0.4,type:'body_blow',zone:'low',side:'l'}],
+      [{tell:0.55,type:'body_blow',zone:'low',side:'l'},{tell:0.5,type:'body_blow',zone:'low',side:'r'},{tell:0.65,type:'uppercut',zone:'high',side:'l'}],
+      [{tell:0.5,type:'jab',zone:'high',side:'r'},{tell:0.55,type:'body_blow',zone:'low',side:'l'},{tell:0.5,type:'body_blow',zone:'low',side:'r'}],
+      [{tell:0.65,type:'uppercut',zone:'high',side:'r'},{tell:0.55,type:'body_blow',zone:'low',side:'l'}],
     ],
     // Sinigang — haymaker combos
     [
@@ -1678,7 +1680,7 @@ function executeAIAttack(){
 
   if(type==='special'){
     specialCut={active:true,timer:0,phase:0,name:F.opp.special,
-      attacker:'opponent',dmg:25*(F.opp.pow/6),stars:0};
+      attacker:'opponent',dmg:15*(F.opp.pow/6),stars:0};
     state=ST.SPECIAL_CUT;stateTime=0;
     F.oState='special';F.oTime=0;
     return;
@@ -1712,11 +1714,11 @@ function executeAIAttack(){
   // Calculate damage
   let dmg=0;
   const powMult=F.opp.pow/6;
-  if(type==='jab')dmg=8*powMult;
-  else if(type==='hook')dmg=12*powMult;
-  else if(type==='body_blow')dmg=10*powMult;
-  else if(type==='uppercut')dmg=18*powMult;
-  else if(type==='special')dmg=25*powMult;
+  if(type==='jab')dmg=5*powMult;
+  else if(type==='hook')dmg=7*powMult;
+  else if(type==='body_blow')dmg=6*powMult;
+  else if(type==='uppercut')dmg=10*powMult;
+  else if(type==='special')dmg=15*powMult;
 
   if(blocked){
     dmg*=0.2;
@@ -1782,7 +1784,7 @@ function processPlayerInput(dt){
   // Special — uses power meter (like Super Punch-Out!! Knockout Punch)
   if(inp.special&&F.superReady){
     specialCut={active:true,timer:0,phase:0,name:F.plr.special||'Super Punch',
-      attacker:'player',dmg:30*(F.plr.pow/6),stars:0};
+      attacker:'player',dmg:18*(F.plr.pow/6),stars:0};
     state=ST.SPECIAL_CUT;stateTime=0;
     F.pState='special';F.pTime=0;
     F.power=0;F.superReady=false;
@@ -1798,7 +1800,7 @@ function processPlayerInput(dt){
     F.jabCount++;F.jabResetTimer=0.8;
     const jabPenalty=Math.min(F.jabCount-1,5);
     F.pState='jabL';F.pTime=0;F.pDir=-1;inputCooldown=0.18+jabPenalty*0.03;F.pThrown++;F.stamina=Math.max(0,F.stamina-(3+jabPenalty));
-    attemptPlayerHit('jabL',5*(F.plr.pow/6));
+    attemptPlayerHit('jabL',3*(F.plr.pow/6));
     return;
   }
 
@@ -1807,7 +1809,7 @@ function processPlayerInput(dt){
     F.jabCount++;F.jabResetTimer=0.8;
     const jabPenalty=Math.min(F.jabCount-1,5);
     F.pState='jabR';F.pTime=0;F.pDir=1;inputCooldown=0.22+jabPenalty*0.03;F.pThrown++;F.stamina=Math.max(0,F.stamina-(4+jabPenalty));
-    attemptPlayerHit('jabR',7*(F.plr.pow/6));
+    attemptPlayerHit('jabR',4*(F.plr.pow/6));
     return;
   }
 
@@ -1815,7 +1817,7 @@ function processPlayerInput(dt){
   if(inp.hookL&&!lastInputState.hookL){
     F.jabCount=0;
     F.pState='hookL';F.pTime=0;F.pDir=-1;inputCooldown=0.32;F.pThrown++;F.stamina=Math.max(0,F.stamina-8);
-    attemptPlayerHit('hookL',12*(F.plr.pow/6));
+    attemptPlayerHit('hookL',7*(F.plr.pow/6));
     return;
   }
 
@@ -1823,7 +1825,7 @@ function processPlayerInput(dt){
   if(inp.hookR&&!lastInputState.hookR){
     F.jabCount=0;
     F.pState='hookR';F.pTime=0;F.pDir=1;inputCooldown=0.34;F.pThrown++;F.stamina=Math.max(0,F.stamina-9);
-    attemptPlayerHit('hookR',14*(F.plr.pow/6));
+    attemptPlayerHit('hookR',8*(F.plr.pow/6));
     return;
   }
 
@@ -1882,7 +1884,7 @@ function attemptPlayerHit(type,dmg){
       extraDizzy = 30; // extra dizzy bonus
     }
 
-    F.power=Math.min(F.maxPower,F.power+20);
+    F.power=Math.min(F.maxPower,F.power+25);
     F.aiTell=false;F.aiStunned=true;F.aiStunTime=0.5;
     F.aiCombo=[];F.aiComboIdx=0;
     F.oState='hit';F.oTime=0;
@@ -1904,7 +1906,7 @@ function attemptPlayerHit(type,dmg){
   if(F.aiStunned){
     F.oState='hit';F.oTime=0;
     F.pLanded++;
-    F.power=Math.min(F.maxPower,F.power+2);
+    F.power=Math.min(F.maxPower,F.power+5);
     if(type==='jabL'||type==='jabR')SFX.jab();
     else SFX.hook();
     addHitEffect(W/2+Math.random()*30-15,280+Math.random()*30,type==='hookL'||type==='hookR');
@@ -1922,7 +1924,7 @@ function attemptPlayerHit(type,dmg){
   if(F.counterWindow>0){
     F.oState='hit';F.oTime=0;
     F.pLanded++;
-    F.power=Math.min(F.maxPower,F.power+10);
+    F.power=Math.min(F.maxPower,F.power+15);
     if(type==='jabL'||type==='jabR')SFX.jab();
     else SFX.hook();
     addHitEffect(W/2+Math.random()*30-15,280+Math.random()*30,type==='hookL'||type==='hookR');
@@ -1965,7 +1967,7 @@ function attemptPlayerHit(type,dmg){
 
   // Hit lands — apply damage and effects
   F.pLanded++;
-  const powerGain = isHook ? 3 : 1;
+  const powerGain = isHook ? 6 : 3;
   F.power=Math.min(F.maxPower,F.power+powerGain);
 
   if(type==='jabL'||type==='jabR')SFX.jab();
@@ -2031,7 +2033,7 @@ function updateKnockdown(dt){
     // Opponent gets up based on health remaining (harder opponents get up easier)
     F.kdMash+=dt*(2+F.opp.def*0.5);
     if(F.kdMash>=5){
-      F.oState='idle';F.oH=Math.max(F.oH,F.maxOH*0.1);
+      F.oState='idle';F.oH=Math.max(F.oH,F.maxOH*0.8);
       F.aiStunned=false;state=ST.FIGHT;stateTime=0;return;
     }
   }
