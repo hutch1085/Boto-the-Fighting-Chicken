@@ -1278,14 +1278,14 @@ function drawHUD(){
   const pPct=Math.max(0,F.pH/100);
   const pCol=pPct>0.5?'#22dd22':pPct>0.25?'#ffaa00':'#ff3333';
   drawText(F.plr.name,10,by+bh/2,'bold 12px monospace','#fff','left');
-  // Rounded bar with inner glow when low
+  // Background bar then health fill
+  drawRRect(65,by,bw,bh,9,'#333');
   ctx.save();
-  drawRRect(65,by,bw,bh,9,pCol);
   if(pPct<0.3){
     ctx.shadowColor='rgba(255,50,50,0.8)';ctx.shadowBlur=10;
-    ctx.globalAlpha=0.5+Math.sin(stateTime*6)*0.3;
-    drawRRect(65,by,bw*pPct,bh,9,pCol);
+    ctx.globalAlpha=0.6+Math.sin(stateTime*6)*0.3;
   }
+  if(pPct>0)drawRRect(65,by,Math.max(4,bw*pPct),bh,9,pCol);
   ctx.restore();
   ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=1;
   ctx.beginPath();ctx.roundRect(65,by,bw,bh,9);ctx.stroke();
@@ -1294,13 +1294,14 @@ function drawHUD(){
   const oPct=Math.max(0,F.oH/F.maxOH);
   const oCol=oPct>0.5?'#22dd22':oPct>0.25?'#ffaa00':'#ff3333';
   drawText(F.opp.name,W-10,by+bh/2,'bold 12px monospace','#fff','right');
+  // Background bar then health fill (right-aligned: fill shrinks from left)
+  drawRRect(W-65-bw,by,bw,bh,9,'#333');
   ctx.save();
-  drawRRect(W-65-bw,by,bw,bh,9,oCol);
   if(oPct<0.3){
     ctx.shadowColor='rgba(255,50,50,0.8)';ctx.shadowBlur=10;
-    ctx.globalAlpha=0.5+Math.sin(stateTime*6)*0.3;
-    drawRRect(W-65-bw,by,bw*oPct,bh,9,oCol);
+    ctx.globalAlpha=0.6+Math.sin(stateTime*6)*0.3;
   }
+  if(oPct>0)drawRRect(W-65-bw+(bw-bw*oPct),by,Math.max(4,bw*oPct),bh,9,oCol);
   ctx.restore();
   ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=1;
   ctx.beginPath();ctx.roundRect(W-65-bw,by,bw,bh,9);ctx.stroke();
@@ -1639,9 +1640,13 @@ function getOpponentCombos(idx){
     ]
   ];
   let pool=combos[idx]||combos[0];
-  // Phase 1 — faster tells
+  // Difficulty scaling — later opponents have tighter reaction windows
+  // idx 0 (El Gallo) = 1.0x, idx 9 (Mabuhay) = 0.65x tell speed
+  const diffScale=1.0-idx*0.035;
+  pool=pool.map(combo=>combo.map(h=>({...h,tell:h.tell*diffScale})));
+  // Phase 1 (low health) — even faster on top of that
   if(phase===1){
-    pool=pool.map(combo=>combo.map(h=>({...h,tell:h.tell*0.8})));
+    pool=pool.map(combo=>combo.map(h=>({...h,tell:h.tell*0.82})));
   }
   return pool;
 }
@@ -1986,7 +1991,7 @@ function playerKnockdown(){
   F.pKD++;F.pState='kd';F.pTime=0;
   SFX.kd();F.shakeTime=0.5;F.shakeAmt=12;
   if(F.pKD>=3){endFight('opponent','TKO');return;}
-  state=ST.KD;F.kdTarget='player';F.kdCount=10;F.kdMash=0;F.kdMashNeeded=8;
+  state=ST.KD;F.kdTarget='player';F.kdCount=10;F.kdMash=0;F.kdMashNeeded=5;
   tapMashCount=0;
 }
 
@@ -2001,10 +2006,10 @@ function updateKnockdown(dt){
   F.kdCount-=dt;
 
   if(F.kdTarget==='player'){
-    // Player must mash to get up
+    // Player must mash to get up — or auto-get-up at count 3
     F.kdMash=tapMashCount;
-    if(F.kdMash>=F.kdMashNeeded){
-      F.pState='idle';F.pH=Math.max(F.pH,80);state=ST.FIGHT;tapMashCount=0;return;
+    if(F.kdMash>=F.kdMashNeeded||F.kdCount<=3){
+      F.pState='idle';F.pH=Math.max(F.pH,F.kdMash>=F.kdMashNeeded?80:40);state=ST.FIGHT;tapMashCount=0;return;
     }
   }else{
     // Player can mash to recover health during opponent's knockdown
@@ -2131,8 +2136,8 @@ function drawTitle(){
   drawText("BOTO THE FIGHTING",W/2,80,'bold 32px monospace','#ffdd00','center',true);
   drawText("CHICKEN'S",W/2,120,'bold 36px monospace','#ffdd00','center',true);
   ctx.restore();
-  drawText('INTERNATIONAL',W/2,168,'bold 30px monospace','#ff4444','center',true);
-  drawText('FIGHT CLUB',W/2,208,'bold 42px monospace','#ff4444','center',true);
+  drawText('INTERNATIONAL',W/2,168,'bold 30px monospace','#ffffff','center',true);
+  drawText('FIGHT CLUB',W/2,208,'bold 42px monospace','#ffffff','center',true);
 
   // Decorative divider line
   ctx.strokeStyle='rgba(255,221,0,0.3)';ctx.lineWidth=2;
