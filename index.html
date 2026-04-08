@@ -332,6 +332,7 @@ function initFight(oppIdx){
     dizzy:0,dizzyMax:100,dizzyState:false,dizzyTime:0,
     // effects
     shakeTime:0,shakeAmt:0,counterFlash:0,pHitStun:0,pCooldown:0,
+    isTKO:false,
     effects:[],
     // knockdown
     kdTarget:'',kdCount:10,kdMash:0,kdMashNeeded:8,lastKdMash:0,
@@ -402,7 +403,23 @@ function drawRoosterFront(x,y,sc,col,animState,animTime,trait,specialId){
     oy+=35*p;scaleX=1+0.1*p;scaleY=0.88+0.05*p;
   }
   if(animState==='block'){oy=5;}
-  if(animState==='kd'){oy=60;ox=Math.sin(animTime*2)*10;}
+  if(animState==='kd'){
+    // Dramatic knockdown: stagger back, spin, collapse
+    const kdT=Math.min(animTime*2,1); // 0→1 over 0.5s
+    if(kdT<0.3){
+      // Phase 1: reel back from hit
+      const p=kdT/0.3;
+      oy=10+30*p;ox=40*p;scaleX=1-0.1*p;scaleY=1+0.05*p;
+    }else if(kdT<0.6){
+      // Phase 2: spin and collapse
+      const p=(kdT-0.3)/0.3;
+      oy=40+50*p;ox=40-60*p;scaleX=0.9-0.2*p;scaleY=1.05+0.15*p;
+    }else{
+      // Phase 3: on the ground, twitching
+      oy=90+Math.sin(animTime*3)*3;ox=-20+Math.sin(animTime*1.5)*5;
+      scaleX=0.7;scaleY=1.2;
+    }
+  }
   if(animState==='tell'){
     // Tell — dramatic wind-up that's VERY visible
     const pulse=Math.sin(animTime*18)*8;
@@ -2001,7 +2018,7 @@ function attemptPlayerHit(type,dmg){
 function playerKnockdown(){
   F.pKD++;F.pState='kd';F.pTime=0;
   SFX.kd();F.shakeTime=0.5;F.shakeAmt=12;
-  if(F.pKD>=3){specialCut.active=false;endFight('opponent','TKO');return;}
+  F.isTKO=(F.pKD>=3);
   state=ST.KD;stateTime=0;F.kdTarget='player';F.kdCount=10;F.kdMash=0;F.kdMashNeeded=5;
   specialCut.active=false;tapMashCount=0;
 }
@@ -2009,13 +2026,30 @@ function playerKnockdown(){
 function opponentKnockdown(){
   F.oKD++;F.oState='kd';F.oTime=0;
   SFX.kd();SFX.crowd();F.shakeTime=0.5;F.shakeAmt=12;
-  if(F.oKD>=3){specialCut.active=false;F.pState='idle';endFight('player','TKO');return;}
+  F.isTKO=(F.oKD>=3);
   state=ST.KD;stateTime=0;F.kdTarget='opponent';F.kdCount=10;F.kdMash=0;F.lastKdMash=0;
   specialCut.active=false;F.pState='idle';F.pTime=0;inputCooldown=0;
 }
 
 function updateKnockdown(dt){
   F.kdCount-=dt;
+
+  if(F.isTKO){
+    // 3rd knockdown — fighter stays down, count plays to 0 then TKO
+    if(F.kdTarget==='opponent'){
+      // Player can still mash to recover HP during TKO countdown
+      if(tapMashCount > F.lastKdMash){
+        const newTaps = tapMashCount - F.lastKdMash;
+        F.pH = Math.min(100, F.pH + newTaps * 2);
+        F.lastKdMash = tapMashCount;
+      }
+    }
+    if(F.kdCount<=0){
+      if(F.kdTarget==='player')endFight('opponent','TKO');
+      else endFight('player','TKO');
+    }
+    return;
+  }
 
   if(F.kdTarget==='player'){
     // Player must mash to get up — or auto-get-up at count 3
@@ -2027,7 +2061,7 @@ function updateKnockdown(dt){
     // Player can mash to recover health during opponent's knockdown
     if(tapMashCount > F.lastKdMash){
       const newTaps = tapMashCount - F.lastKdMash;
-      F.pH = Math.min(100, F.pH + newTaps * 2); // 2 HP per tap
+      F.pH = Math.min(100, F.pH + newTaps * 2);
       F.lastKdMash = tapMashCount;
     }
     // Opponent gets up based on health remaining (harder opponents get up easier)
@@ -2552,35 +2586,65 @@ function drawFight(){
 function drawKnockdown(){
   drawFight();
 
-  // Overlay
-  drawRect(0,0,W,H,'rgba(0,0,0,0.4)');
+  // Dramatic darkening overlay — flashes bright then darkens
+  const flashAlpha=stateTime<0.15?0.6*(1-stateTime/0.15):0; // white flash at start
+  if(flashAlpha>0){
+    ctx.globalAlpha=flashAlpha;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);ctx.globalAlpha=1;
+  }
+  drawRect(0,0,W,H,'rgba(0,0,0,0.5)');
 
-  const count=Math.ceil(F.kdCount);
+  // Cinematic letterbox bars
+  const barH=40;
+  drawRect(0,0,W,barH,'rgba(0,0,0,0.8)');
+  drawRect(0,H-barH,W,barH,'rgba(0,0,0,0.8)');
 
-  // Dramatic scale pulse on count change
-  const pulse=Math.sin(stateTime*8)*0.1+1;
+  const count=Math.ceil(Math.max(0,F.kdCount));
+
+  // Expanding shockwave rings (multiple)
+  ctx.save();
+  for(let r=0;r<3;r++){
+    const ringTime=(stateTime*1.5+r*0.3)%1.5;
+    const ringR=ringTime*120;
+    const ringAlpha=Math.max(0,1-ringTime/1.5)*0.4;
+    ctx.globalAlpha=ringAlpha;
+    ctx.strokeStyle='#ffdd00';ctx.lineWidth=3-ringTime*1.5;
+    ctx.beginPath();ctx.arc(W/2,H/2-50,ringR,0,Math.PI*2);ctx.stroke();
+  }
+  ctx.restore();
+
+  // Giant count number with dramatic zoom pulse
+  const pulse=1+Math.sin(stateTime*6)*0.12;
+  const countScale=stateTime<0.3?0.5+stateTime/0.3*0.5:1; // zoom in on first appear
   ctx.save();
   ctx.translate(W/2,H/2-50);
-  ctx.scale(pulse,pulse);
+  ctx.scale(pulse*countScale,pulse*countScale);
   ctx.translate(-W/2,-H/2+50);
-  drawText(count.toString(),W/2,H/2-50,'bold 120px monospace','#ffdd00','center',true);
+  // Shadow behind number
+  drawText(count.toString(),W/2+3,H/2-47,'bold 130px monospace','rgba(0,0,0,0.5)','center',false);
+  drawText(count.toString(),W/2,H/2-50,'bold 130px monospace','#ffdd00','center',true);
   ctx.restore();
 
-  // Radial shockwave ring behind number
-  ctx.save();
-  const shockwaveAlpha=Math.max(0,1-Math.sin(stateTime*12)*0.3);
-  ctx.globalAlpha=shockwaveAlpha;
-  ctx.strokeStyle='rgba(255,221,0,0.5)';ctx.lineWidth=2;
-  const shockwave=Math.sin(stateTime*12)*30+20;
-  ctx.beginPath();ctx.arc(W/2,H/2-50,shockwave,0,Math.PI*2);ctx.stroke();
-  ctx.restore();
-
-  if(F.kdTarget==='player'){
+  if(F.isTKO){
+    // TKO — show dramatic "TKO" text flashing as count goes down
+    const tkoFlash=Math.sin(stateTime*8)>0?'#ff2222':'#ffdd00';
+    drawText('KNOCKDOWN #'+F.oKD+'!',W/2,H/2+50,'bold 22px monospace','#ff4444','center',true);
+    if(F.kdCount<=5){
+      const tkoScale=1+Math.sin(stateTime*10)*0.1;
+      ctx.save();
+      ctx.translate(W/2,H/2+100);
+      ctx.scale(tkoScale,tkoScale);
+      ctx.translate(-W/2,-H/2-100);
+      drawText("THEY'RE NOT GETTING UP!",W/2,H/2+100,'bold 18px monospace',tkoFlash,'center',true);
+      ctx.restore();
+    }
+    if(F.kdTarget==='opponent'){
+      drawText('TAP TO RECOVER HP!',W/2,H/2+140,'bold 14px monospace','#88ff88','center',true);
+    }
+  }else if(F.kdTarget==='player'){
     drawText('TAP RAPIDLY TO GET UP!',W/2,H/2+50,'bold 18px monospace','#fff','center',true);
     // Mash meter with animated fill glow
     const pct=Math.min(1,F.kdMash/F.kdMashNeeded);
     ctx.save();
-    // Glow behind fill
     if(pct>0){
       ctx.shadowColor='rgba(68,221,68,0.8)';ctx.shadowBlur=10;
       drawBar(W/2-100,H/2+80,200,20,pct,'#44dd44');
@@ -2589,7 +2653,8 @@ function drawKnockdown(){
     drawBar(W/2-100,H/2+80,200,20,pct,'#44dd44');
     ctx.restore();
   }else{
-    drawText('KNOCKDOWN!',W/2,H/2+50,'bold 24px monospace','#ff4444','center',true);
+    drawText('KNOCKDOWN #'+F.oKD+'!',W/2,H/2+50,'bold 22px monospace','#ff4444','center',true);
+    drawText('TAP TO RECOVER HP!',W/2,H/2+90,'bold 14px monospace','#88ff88','center',true);
   }
 }
 
