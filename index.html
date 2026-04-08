@@ -111,21 +111,29 @@ let audioCtx=null;
 function ensureAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();}
 
 function playTone(freq,dur,type,vol,detune){
-  ensureAudio();const g=audioCtx.createGain();const o=audioCtx.createOscillator();
-  o.type=type||'square';o.frequency.value=freq;if(detune)o.detune.value=detune;
-  g.gain.setValueAtTime(vol||0.15,audioCtx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
-  o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
+  try{
+    ensureAudio();const g=audioCtx.createGain();const o=audioCtx.createOscillator();
+    o.type=type||'square';o.frequency.value=freq;if(detune)o.detune.value=detune;
+    g.gain.setValueAtTime(vol||0.15,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);
+    // Disconnect nodes after playback to free mobile audio resources
+    o.onended=()=>{try{o.disconnect();g.disconnect();}catch(e){}};
+  }catch(e){}
 }
 
 function playNoise(dur,vol){
-  ensureAudio();const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
-  const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1);
-  const s=audioCtx.createBufferSource();s.buffer=buf;
-  const g=audioCtx.createGain();g.gain.setValueAtTime(vol||0.1,audioCtx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
-  const f=audioCtx.createBiquadFilter();f.type='bandpass';f.frequency.value=800;f.Q.value=1;
-  s.connect(f);f.connect(g);g.connect(audioCtx.destination);s.start();
+  try{
+    ensureAudio();const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1);
+    const s=audioCtx.createBufferSource();s.buffer=buf;
+    const g=audioCtx.createGain();g.gain.setValueAtTime(vol||0.1,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    const f=audioCtx.createBiquadFilter();f.type='bandpass';f.frequency.value=800;f.Q.value=1;
+    s.connect(f);f.connect(g);g.connect(audioCtx.destination);s.start();
+    // Stop and disconnect nodes after playback to free mobile audio resources
+    setTimeout(()=>{try{s.stop();s.disconnect();f.disconnect();g.disconnect();}catch(e){}},Math.ceil(dur*1000)+50);
+  }catch(e){}
 }
 
 function safeSFX(fn){try{fn();}catch(e){}}
