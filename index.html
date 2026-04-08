@@ -128,19 +128,20 @@ function playNoise(dur,vol){
   s.connect(f);f.connect(g);g.connect(audioCtx.destination);s.start();
 }
 
+function safeSFX(fn){try{fn();}catch(e){}}
 const SFX={
-  jab(){playNoise(0.08,0.2);playTone(200,0.05,'square',0.1);},
-  hook(){playNoise(0.12,0.3);playTone(150,0.08,'square',0.15);},
-  uppercut(){playNoise(0.18,0.4);playTone(100,0.12,'sawtooth',0.2);},
-  block(){playNoise(0.06,0.1);playTone(300,0.04,'sine',0.08);},
-  miss(){playTone(400,0.06,'sine',0.05);},
-  bell(){playTone(800,0.8,'sine',0.3);setTimeout(()=>playTone(800,0.6,'sine',0.2),300);},
-  crow(){playTone(600,0.15,'sawtooth',0.2);setTimeout(()=>playTone(800,0.15,'sawtooth',0.25),100);
-    setTimeout(()=>playTone(1000,0.3,'sawtooth',0.2),200);},
-  select(){playTone(440,0.08,'square',0.1);playTone(660,0.08,'square',0.1);},
-  kd(){playNoise(0.3,0.5);playTone(80,0.3,'sawtooth',0.3);},
-  star(){playTone(523,0.1,'sine',0.2);playTone(659,0.1,'sine',0.2);playTone(784,0.15,'sine',0.25);},
-  crowd(){playNoise(0.5,0.08);}
+  jab(){safeSFX(()=>{playNoise(0.08,0.2);playTone(200,0.05,'square',0.1);});},
+  hook(){safeSFX(()=>{playNoise(0.12,0.3);playTone(150,0.08,'square',0.15);});},
+  uppercut(){safeSFX(()=>{playNoise(0.18,0.4);playTone(100,0.12,'sawtooth',0.2);});},
+  block(){safeSFX(()=>{playNoise(0.06,0.1);playTone(300,0.04,'sine',0.08);});},
+  miss(){safeSFX(()=>{playTone(400,0.06,'sine',0.05);});},
+  bell(){safeSFX(()=>{playTone(800,0.8,'sine',0.3);setTimeout(()=>safeSFX(()=>playTone(800,0.6,'sine',0.2)),300);});},
+  crow(){safeSFX(()=>{playTone(600,0.15,'sawtooth',0.2);setTimeout(()=>safeSFX(()=>playTone(800,0.15,'sawtooth',0.25)),100);
+    setTimeout(()=>safeSFX(()=>playTone(1000,0.3,'sawtooth',0.2)),200);});},
+  select(){safeSFX(()=>{playTone(440,0.08,'square',0.1);playTone(660,0.08,'square',0.1);});},
+  kd(){safeSFX(()=>{playNoise(0.3,0.5);playTone(80,0.3,'sawtooth',0.3);});},
+  star(){safeSFX(()=>{playTone(523,0.1,'sine',0.2);playTone(659,0.1,'sine',0.2);playTone(784,0.15,'sine',0.25);});},
+  crowd(){safeSFX(()=>{playNoise(0.5,0.08);});}
 };
 
 let musicPlaying=false,musicOscs=[];
@@ -322,7 +323,7 @@ function initFight(oppIdx){
     // dizzy system
     dizzy:0,dizzyMax:100,dizzyState:false,dizzyTime:0,
     // effects
-    shakeTime:0,shakeAmt:0,counterFlash:0,
+    shakeTime:0,shakeAmt:0,counterFlash:0,pHitStun:0,pCooldown:0,
     effects:[],
     // knockdown
     kdTarget:'',kdCount:10,kdMash:0,kdMashNeeded:8,lastKdMash:0,
@@ -1990,16 +1991,17 @@ function attemptPlayerHit(type,dmg){
 function playerKnockdown(){
   F.pKD++;F.pState='kd';F.pTime=0;
   SFX.kd();F.shakeTime=0.5;F.shakeAmt=12;
-  if(F.pKD>=3){endFight('opponent','TKO');return;}
-  state=ST.KD;F.kdTarget='player';F.kdCount=10;F.kdMash=0;F.kdMashNeeded=5;
-  tapMashCount=0;
+  if(F.pKD>=3){specialCut.active=false;endFight('opponent','TKO');return;}
+  state=ST.KD;stateTime=0;F.kdTarget='player';F.kdCount=10;F.kdMash=0;F.kdMashNeeded=5;
+  specialCut.active=false;tapMashCount=0;
 }
 
 function opponentKnockdown(){
   F.oKD++;F.oState='kd';F.oTime=0;
   SFX.kd();SFX.crowd();F.shakeTime=0.5;F.shakeAmt=12;
-  if(F.oKD>=3){endFight('player','TKO');return;}
-  state=ST.KD;F.kdTarget='opponent';F.kdCount=10;F.kdMash=0;F.lastKdMash=0;
+  if(F.oKD>=3){specialCut.active=false;F.pState='idle';endFight('player','TKO');return;}
+  state=ST.KD;stateTime=0;F.kdTarget='opponent';F.kdCount=10;F.kdMash=0;F.lastKdMash=0;
+  specialCut.active=false;F.pState='idle';F.pTime=0;inputCooldown=0;
 }
 
 function updateKnockdown(dt){
@@ -2009,7 +2011,7 @@ function updateKnockdown(dt){
     // Player must mash to get up — or auto-get-up at count 3
     F.kdMash=tapMashCount;
     if(F.kdMash>=F.kdMashNeeded||F.kdCount<=3){
-      F.pState='idle';F.pH=Math.max(F.pH,F.kdMash>=F.kdMashNeeded?80:40);state=ST.FIGHT;tapMashCount=0;return;
+      F.pState='idle';F.pH=Math.max(F.pH,F.kdMash>=F.kdMashNeeded?80:40);state=ST.FIGHT;stateTime=0;tapMashCount=0;return;
     }
   }else{
     // Player can mash to recover health during opponent's knockdown
@@ -2022,11 +2024,17 @@ function updateKnockdown(dt){
     F.kdMash+=dt*(2+F.opp.def*0.5);
     if(F.kdMash>=5){
       F.oState='idle';F.oH=Math.max(F.oH,F.maxOH*0.1);
-      F.aiStunned=false;state=ST.FIGHT;return;
+      F.aiStunned=false;state=ST.FIGHT;stateTime=0;return;
     }
   }
 
   if(F.kdCount<=0){
+    if(F.kdTarget==='player')endFight('opponent','KO');
+    else endFight('player','KO');
+  }
+
+  // Safety: if KD has lasted over 12 seconds somehow, force resolution
+  if(stateTime>12&&state===ST.KD){
     if(F.kdTarget==='player')endFight('opponent','KO');
     else endFight('player','KO');
   }
@@ -3976,8 +3984,13 @@ function gameLoop(ts){
   const dt=Math.min((ts-lastTime)/1000,0.05);
   lastTime=ts;
 
-  update(dt);
-  render();
+  try{
+    update(dt);
+    render();
+  }catch(e){
+    // Recover gracefully — never let an error kill the game loop
+    console.error('Game loop error:',e);
+  }
 
   requestAnimationFrame(gameLoop);
 }
